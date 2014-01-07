@@ -19,8 +19,14 @@
   clojure.java.classpath
   (:require [clojure.java.io :as io])
   (:import (java.io File)
-           (java.util.jar JarFile JarEntry)
-           (java.net URL URLClassLoader)))
+           (java.util.jar JarFile JarEntry)))
+
+(defprotocol Classpath
+  (urls [loader] "A classloader's search path as a sequence of URLs"))
+
+(extend-type java.net.URLClassLoader
+  Classpath
+  (urls [loader] (seq (.getURLs loader))))
 
 (defn jar-file?
   "Returns true if file is a normal file with a .jar or .JAR extension."
@@ -46,21 +52,16 @@
        (.split (System/getProperty "java.class.path")
                (System/getProperty "path.separator"))))
 
-(defn loader-classpath
-  "Returns a sequence of File paths from a classloader."
-  [loader]
-  (when (instance? java.net.URLClassLoader loader)
-    (map io/as-file (.getURLs ^java.net.URLClassLoader loader))))
-
 (defn classpath
   "Returns a sequence of File objects of the elements on the classpath."
   ([classloader]
-     (distinct
-      (mapcat
-       loader-classpath
-       (take-while
-        identity
-        (iterate #(.getParent ^ClassLoader %) classloader)))))
+     (map io/as-file
+       (distinct
+         (mapcat
+           urls
+           (take-while
+             identity
+             (iterate #(.getParent ^ClassLoader %) classloader))))))
   ([] (classpath (clojure.lang.RT/baseLoader))))
 
 (defn classpath-directories
